@@ -1,4 +1,3 @@
-# VC2019_Redist
 
 # Visual Studio 2019용 Microsoft Visual C++ 재배포 가능 패키지(x64)
 https://aka.ms/vs/16/release/VC_redist.x64.exe
