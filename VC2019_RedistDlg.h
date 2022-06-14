@@ -23,7 +23,7 @@ private:
 	void UnZiPfile(CString strCurrentPath);
 	BOOL GetReourceFiles(CString strFileName, CString strResourceID, UINT nID);
 	BOOL SetUnZipFolder(CString strCurrentPath, CString strFilePath = L"");
+	DWORD GetPID(LPCTSTR szFileName);
 
-	rediSetup Setupobj;
-	BOOL bTimer;
+	int m_nCheckCount;
 };

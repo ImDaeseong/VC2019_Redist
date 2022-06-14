@@ -8,13 +8,10 @@
 #define new DEBUG_NEW
 #endif
 
-#include "zip.h"
-#include "unzip.h"
-
 CVC2019RedistDlg::CVC2019RedistDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_VC2019_REDIST_DIALOG, pParent)
 {
-	bTimer = FALSE;
+	m_nCheckCount = 0;
 }
 
 void CVC2019RedistDlg::DoDataExchange(CDataExchange* pDX)
@@ -46,105 +43,57 @@ void CVC2019RedistDlg::OnPaint()
 
 void CVC2019RedistDlg::OnTimer(UINT_PTR nIDEvent)
 {
-	int nKillCount = 0;
-
-	if (nIDEvent == TIMER_SETUP_CHECK)
+	if (m_nCheckCount > 5)
 	{
-		if (Setupobj.GetPID(L"MicrosoftEdgeWebView2RuntimeInstallerX86.exe") == 0)
+		if (GetPID(L"MicrosoftEdgeWebView2RuntimeInstallerX86.exe") == 0 && GetPID(L"VC_redist.x86.exe") == 0)
 		{
-			nKillCount++;
-		}
-
-		if (Setupobj.GetPID(L"VC_redist.x86.exe") == 0)
-		{
-			nKillCount++;
-		}
-
-		if (nKillCount == 2)
-		{
-			KillTimer(nIDEvent);
+			KillTimer(1);
 			CDialogEx::OnOK();
 		}
 	}
+
+	m_nCheckCount++;
 
 	CDialogEx::OnTimer(nIDEvent);
 }
 
 void CVC2019RedistDlg::InitLib()
 {
-	CString strCurrentPath = Setupobj.GetModulePath();
+	VCEdgePackage obj;
 
-	//설치파일 리소스에서 가져오기
-	UnZiPfile(strCurrentPath);
-
-
-	//엣지 브라우저 설치 정보 확인
-	Setupobj.infoEdgeUnInstall();
+	//unzip resource
+	UnZiPfile(obj.GetModulePath());
 
 
-	//엣지 런타임 설치
-	BOOL bedge = Setupobj.setupEdgeWebViewRunTimelib();
-	if (!bedge)
+	//엣지 런타임/vc 재배포 패키지 설치여부 체크
+	if (obj.setup_EdgeRunTimelib() && obj.setup_redist())
 	{
-		bTimer = TRUE;
+		CDialog::OnOK();
+		return;
 	}
 
-	//vc 재배포 패키지 설치
-	BOOL bredist = Setupobj.setupMicrosoftVC_redist();
-	if (!bredist)
-	{
-		bTimer = TRUE;
-	}
-
-	bTimer = TRUE;
-	if (bTimer)
-	{
-		SetTimer(TIMER_SETUP_CHECK, 1000, NULL);
-	}
-	else
-	{
-		CDialogEx::OnOK();
-	}
+	//설치 프로세스 감시	
+	SetTimer(1, 1000, NULL);
 }
 
 //설치 파일 압축 해제
 void CVC2019RedistDlg::UnZiPfile(CString strCurrentPath)
 {
-	CString strEdge64ZipFile, strEdge86ZipFile, strVC64ZipFile, strVC86ZipFile;
+	CString strEdgeFile, strVcFile;
 
-	strEdge64ZipFile.Format(_T("%sMicrosoftEdgeWebView2RuntimeInstallerX64.zip"), strCurrentPath);
-	if (GetReourceFiles(strEdge64ZipFile, _T("RC"), IDR_RC1) == TRUE)
+	strEdgeFile.Format(L"%s\\MicrosoftEdgeWebView2RuntimeInstallerX86.zip", strCurrentPath);
+	if (GetReourceFiles(strEdgeFile, _T("RC"), IDR_RC1) == TRUE)
 	{
-		if (SetUnZipFolder(strCurrentPath, strEdge64ZipFile) == FALSE)
+		if (SetUnZipFolder(strCurrentPath, strEdgeFile) == FALSE)
 		{
 			return;
 		}
 	}
 
-	strEdge86ZipFile.Format(_T("%sMicrosoftEdgeWebView2RuntimeInstallerX86.zip"), strCurrentPath);
-	if (GetReourceFiles(strEdge86ZipFile, _T("RC"), IDR_RC2) == TRUE)
+	strVcFile.Format(L"%s\\VC_redist.x86.zip", strCurrentPath);
+	if (GetReourceFiles(strVcFile, _T("RC"), IDR_RC2) == TRUE)
 	{
-		if (SetUnZipFolder(strCurrentPath, strEdge86ZipFile) == FALSE)
-		{
-			return;
-		}
-	}
-
-
-	strVC64ZipFile.Format(_T("%sVC_redist.x64.zip"), strCurrentPath);
-	if (GetReourceFiles(strVC64ZipFile, _T("RC"), IDR_RC3) == TRUE)
-	{
-		if (SetUnZipFolder(strCurrentPath, strVC64ZipFile) == FALSE)
-		{
-			return;
-		}
-	}
-
-
-	strVC86ZipFile.Format(_T("%sVC_redist.x86.zip"), strCurrentPath);
-	if (GetReourceFiles(strVC86ZipFile, _T("RC"), IDR_RC4) == TRUE)
-	{
-		if (SetUnZipFolder(strCurrentPath, strVC86ZipFile) == FALSE)
+		if (SetUnZipFolder(strCurrentPath, strVcFile) == FALSE)
 		{
 			return;
 		}
@@ -203,7 +152,7 @@ BOOL CVC2019RedistDlg::SetUnZipFolder(CString strCurrentPath, CString strFilePat
 	{
 		GetZipItem(hZip, i, &zipItem);
 
-		strOutputFile.Format(_T("%s\\%s"), strCurrentPath, CString(zipItem.name));
+		strOutputFile.Format(L"%s\\%s", strCurrentPath, CString(zipItem.name));
 
 		UnzipItem(hZip, i, strOutputFile);
 	}
@@ -214,3 +163,30 @@ BOOL CVC2019RedistDlg::SetUnZipFolder(CString strCurrentPath, CString strFilePat
 	return TRUE;
 }
 
+DWORD CVC2019RedistDlg::GetPID(LPCTSTR szFileName)
+{
+	CString szFile;
+	PROCESSENTRY32 proc;
+	DWORD pid = 0;
+
+	proc.dwSize = sizeof(PROCESSENTRY32);
+	HANDLE hsnap = ::CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+	if (hsnap != INVALID_HANDLE_VALUE)
+	{
+		BOOL bRes = ::Process32First(hsnap, &proc);
+		while (bRes)
+		{
+			if (_tcscmp(proc.szExeFile, szFileName) == 0)
+			{
+				pid = proc.th32ProcessID;
+				break;
+			}
+
+			bRes = ::Process32Next(hsnap, &proc);
+		}
+
+		CloseHandle(hsnap);
+	}
+
+	return pid;
+}

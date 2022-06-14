@@ -29,10 +29,9 @@
 
 
 #include <Tlhelp32.h>
-#include "rediSetup.h"
-
-#define TIMER_SETUP_CHECK	100
-
+#include "zip.h"
+#include "unzip.h"
+#include "VCEdgePackage.h"
 
 
 
